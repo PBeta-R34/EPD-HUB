@@ -13,7 +13,7 @@ def main():
           "title": "EPD Hub Updated",
           "url": "https://pbeta-r34.github.io/EPD-HUB/",
           "description": "Update Date " + time.strftime("%a, %d %b %Y %H:%M:%S", time.gmtime()),
-          "color": "#0DACE0",
+          "color": 0x0DACE0,
           "fields": [
             {
               "name": "Hub Version:",
