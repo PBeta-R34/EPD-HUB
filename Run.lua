@@ -7,7 +7,7 @@ HttpGet =
 getgenv().EPD_DEBUG = true
 
 local LoadedFunction = loadstring(HttpGet("https://raw.githubusercontent.com/PBeta-R34/EPD-HUB/main/Source/Loader.lua"))
-if LoadedFunction then
+if type(LoadedFunction) == "function" then
 	local Success, Returned = pcall(LoadedFunction)
 	
 	-- We Don't Wanna Print Unless Debug Is True
