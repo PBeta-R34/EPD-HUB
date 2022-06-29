@@ -1,6 +1,6 @@
-
 -- Constants
 local c_RootPath = "https://raw.githubusercontent.com/PBeta-R34/EPD-HUB/main/Source/"
+local c_BaseLib = "Libraries/BaseLibrary.lua"
 local c_Scripts = {
 	{"Utils", "LABEL"},
 	{"Explorer", "Scripts/Explorer.lua", "REL"},
@@ -12,6 +12,33 @@ local c_Scripts = {
 	{"Cheats", "LABEL"},
 	{"Universal ESP", "Scripts/UniversalESP.lua", "REL"}
 	
+}
+local c_Exploits = {
+	{
+		Name = "Synapse X",
+		Checksums = {0xF83462F2}
+	}
+}
+
+local c_GlobalEnv = _G
+local c_ScriptButtonSize = UDim2.new(1, 0, 0, 18)
+
+
+local c_ColorScheme = {
+	Borders = Color3.new(1, 1, 1),
+	Background = Color3.fromRGB(30, 30, 30),
+	Text = Color3.new(1, 1, 1),
+
+	Selector = {
+		Idle = Color3.fromRGB(100, 100, 100),
+		Select = Color3.fromRGB(100, 255, 100),
+		Delete = Color3.fromRGB(255, 100, 100),
+		Loading = Color3.fromRGB(255, 255, 100)
+	},
+	Button = {
+		Background = Color3.fromRGB(50, 50, 50),
+		Text = Color3.new(1, 1, 1)
+	}
 }
 local c_TransparencyTweening = TweenInfo.new(
 	0.5,
@@ -29,30 +56,6 @@ local c_SelectorColorTweening = TweenInfo.new(
 	Enum.EasingDirection.InOut
 )
 
-local c_ColorScheme = {
-	Borders = Color3.new(1, 1, 1),
-	Background = Color3.fromRGB(30, 30, 30),
-	Text = Color3.new(1, 1, 1),
-	
-	Selector = {
-		Idle = Color3.fromRGB(100, 100, 100),
-		Select = Color3.fromRGB(100, 255, 100),
-		Delete = Color3.fromRGB(255, 100, 100),
-		Loading = Color3.fromRGB(255, 255, 100)
-	},
-	Button = {
-		Background = Color3.fromRGB(50, 50, 50),
-		Text = Color3.new(1, 1, 1)
-	}
-}
-
-local c_ButtonSize = UDim2.new(1, 0, 0, 18)
-local c_Exploits = {
-	{
-		Name = "Synapse X",
-		Checksums = {0xF83462F2}
-	}
-}
 
 
 -- Services
@@ -70,18 +73,16 @@ local u_HostExploit = {
 }
 
 -- Others
-local HttpGet =
-	httpget or http_get
-	or (syn 			and function(Link) return syn.request({Url = Link, Method = "GET"}).Body end)
-	or (game.HttpGet 	and function(Link) return game:HttpGet(Link) end)
-
+local HttpGet = c_GlobalEnv.EPD.HttpGet
 
 -- Functions
 function LoadScript(ScriptSource)
 	local LoadedFunction = loadstring(ScriptSource)
 	if type(LoadedFunction) == "function" then
 		local Success, Returned = pcall(LoadedFunction)
-		return Success
+		if Success then
+			return Returned
+		end
 	end
 	
 	return false
@@ -112,7 +113,7 @@ do
 	local function MakeExploitEnvString(Env)
 		local Result = ""
 		local Queue = {Env}
-		local ForbiddenItems = {"_G"}
+		local ForbiddenItems = {"_G", "EPD"}
 		local AllowedTypes = {"function", "table"}
 		
 		local Table = nil
@@ -143,6 +144,8 @@ do
 	--setclipboard(string.format("0x%X", Checksum))
 	
 	do
+		-- Save Checksum In Case The Exploit Is Unknown
+		u_HostExploit.Checksums = {Checksum}
 		for _, Exploit in pairs(c_Exploits) do
 			if table.find(Exploit.Checksums, Checksum) then
 				u_HostExploit = Exploit
@@ -151,6 +154,17 @@ do
 	end
 end
 
+--------------------
+-- BASE LIB SETUP --
+--------------------
+do
+	c_GlobalEnv.EPD = c_GlobalEnv.EPD or {}
+	local EPDTable = c_GlobalEnv.EPD
+	EPDTable.BaseLib = EPDTable.BaseLib or LoadScript(HttpGet(c_RootPath .. c_BaseLib))
+	
+	EPDTable.BaseLib.RootPath = c_RootPath
+	EPDTable.BaseLib.Exploit = u_HostExploit
+end
 
 --------------
 -- MAIN GUI --
@@ -290,7 +304,7 @@ do
 	-- EVENTS MANAGEMENT --
 	-----------------------
 	do
-		local l_YOffset = (ScriptsSelectionFrame.AbsoluteSize.Y - c_ButtonSize.Y.Offset) / 2
+		local l_YOffset = (ScriptsSelectionFrame.AbsoluteSize.Y - c_ScriptButtonSize.Y.Offset) / 2
 		local l_TargetCurrentTween = nil
 		local l_LastTweenTarget = nil
 		
@@ -434,7 +448,7 @@ do
 			Button.TextScaled = true
 			Button.Name = Iteration
 			Button.Font = Enum.Font.Ubuntu
-			Button.Size = c_ButtonSize
+			Button.Size = c_ScriptButtonSize
 			Button.TextColor3 = c_ColorScheme.Button.Text
 			Button.BackgroundTransparency = 0.5
 			Button.BackgroundColor3 = c_ColorScheme.Button.Background
