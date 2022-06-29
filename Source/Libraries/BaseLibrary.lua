@@ -22,7 +22,7 @@ end
 BaseLib.HttpGet =
 	httpget or http_get
 	or (syn 			and function(Link) return syn.request({Url = Link, Method = "GET"}).Body end)
-	or (game.HttpGet 	and function(Link) return game:HttpGet(Link) end)
+	or (game.HttpGet	and function(Link) return game:HttpGet(Link) end)
 	or error("No HTTP Get Function.")
 
 BaseLib.ImportFile = function(FilePath)
