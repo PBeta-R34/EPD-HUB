@@ -16,7 +16,7 @@ local c_Scripts = {
 local c_Exploits = {
 	{
 		Name = "Synapse X",
-		Checksums = {0xF83462F2}
+		Checksums = {0x282CD0F6}
 	}
 }
 
@@ -28,16 +28,28 @@ local c_ColorScheme = {
 	Borders = Color3.new(1, 1, 1),
 	Background = Color3.fromRGB(30, 30, 30),
 	Text = Color3.new(1, 1, 1),
-
+	Disabled = Color3.fromRGB(100, 100, 100),
+	
 	Selector = {
 		Idle = Color3.fromRGB(100, 100, 100),
 		Select = Color3.fromRGB(100, 255, 100),
 		Delete = Color3.fromRGB(255, 100, 100),
 		Loading = Color3.fromRGB(255, 255, 100)
 	},
-	Button = {
-		Background = Color3.fromRGB(50, 50, 50),
-		Text = Color3.new(1, 1, 1)
+	ScriptList = {
+		LabelBackground = Color3.fromRGB(60, 60, 60),
+		ButtonBackground = Color3.fromRGB(50, 50, 50),
+		
+		Text = Color3.new(1, 1, 1),
+		
+		ToolbarButtons = {
+			AddScript = Color3.fromRGB(100, 185, 255),
+			RemoveScript = Color3.fromRGB(100, 185, 255), -- 255, 65, 65
+			MoveUp = Color3.fromRGB(185, 255, 100),
+			MoveDown = Color3.fromRGB(185, 255, 100),
+			Configs = Color3.fromRGB(200,200,200),
+			Execute = Color3.fromRGB(0, 255, 60)
+		}
 	}
 }
 local c_TransparencyTweening = TweenInfo.new(
@@ -166,7 +178,8 @@ do
 	local l_LockSelector = false
 	
 	local l_SetSelectorTarget = nil
-	local l_Target = {Button = nil, Execute = nil}
+	local l_Selected = {Button = nil, Execute = nil}
+	local l_ScriptToolbarButtons = {}
 	
 	-- Functions
 	function RoundGui(GUI, Rounding: UDim)
@@ -229,15 +242,11 @@ do
 		Padding = UDim.new(0, 2)
 	}, InfoFrame)
 	
-	local ExploitLabel = NewInstance("TextLabel", {
-		Size = UDim2.new(0, 0, 1, 0),
+	local InfoSubFrame = NewInstance("Frame", {
+		Size = UDim2.new(1, -80, 1, 0),
+		Position = UDim2.new(0, 0, 1, 0),
+		AnchorPoint = Vector2.new(0, 1),
 		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		Font = Enum.Font.Ubuntu,
-		TextColor3 = c_ColorScheme.Text,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Text = "Exploit: " .. u_HostExploit.Name,
-		TextSize = 15
 	}, InfoFrame)
 	
 	local CloseButton = NewInstance("TextButton", {
@@ -251,18 +260,8 @@ do
 		Active = false
 	}, InfoFrame)
 	
-	local ExecuteButton = NewInstance("TextButton", {
-		Size = UDim2.new(0, 80, 1, 0),
-		Font = Enum.Font.Ubuntu,
-		TextColor3 = c_ColorScheme.Text,
-		BackgroundColor3 = c_ColorScheme.Background,
-		BorderColor3 = c_ColorScheme.Borders,
-		Text = "Execute",
-		TextScaled = true
-	}, InfoFrame)
-	
 	local Scripts = NewInstance("ScrollingFrame", {
-		Size = UDim2.new(0.3, 0, 1, -30),
+		Size = UDim2.new(0.3, 0, 1, -50),
 		TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
 		BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
 		CanvasSize = UDim2.new(0, 0, 0, 0),
@@ -280,7 +279,7 @@ do
 	}, Scripts)
 	
 	local ScriptsSelectionFrame = NewInstance("Frame", {
-		Size = UDim2.new(0.3, 0, 0, 18),
+		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 0, 18),
 		Position = UDim2.new(-1, 0, 0, 0),
 		BackgroundColor3 = c_ColorScheme.Selector.Idle,
 		BorderSizePixel = 0,
@@ -288,6 +287,74 @@ do
 		ZIndex = 1
 	}, MainFrame)
 	AddToApplyTweenList(ScriptsSelectionFrame)
+	
+	local ScriptEditMenu = NewInstance("Frame", {
+		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 0, 20),
+		BorderSizePixel = 1,
+		BorderColor3 = c_ColorScheme.Borders,
+		BackgroundColor3 = c_ColorScheme.Background,
+		Position = UDim2.new(0, 0, 1, -30),
+		AnchorPoint = Vector2.new(0, 1)
+	}, MainFrame)
+	
+	local ScriptsEditMenuLayout = NewInstance("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0, 0)
+	}, ScriptEditMenu)
+	
+	-------------------------
+	-- SCRIPT EDIT BUTTONS --
+	-------------------------
+	do
+		local c_EditButtons = {
+			{
+				Image = "rbxassetid://3926307971",
+				Buttons = {
+					{"AddScript", Vector2.new(324, 364)},
+					{"RemoveScript", Vector2.new(884, 284)},
+					{"MoveUp", Vector2.new(164, 524)},
+					{"MoveDown", Vector2.new(204, 484)},
+				}
+			},
+			{
+				Image = "rbxassetid://3926305904",
+				Buttons = {
+					{"Configs", Vector2.new(4, 124)},
+					{"Execute", Vector2.new(644, 204)}
+				}
+			}
+		}
+		
+		local Config = {
+			Size = UDim2.new(1, 0, 1, 0),
+			SizeConstraint = Enum.SizeConstraint.RelativeYY,
+			BackgroundTransparency = 1,
+			ImageRectSize = Vector2.new(36, 36)
+		}
+		
+		
+		for _, ButtonSet in pairs(c_EditButtons) do
+			Config.Image = ButtonSet.Image
+			for _, Button in pairs(ButtonSet.Buttons) do
+				Config.ImageRectOffset = Button[2]
+				Config.ImageColor3 = c_ColorScheme.Disabled
+				l_ScriptToolbarButtons[Button[1]] = NewInstance("ImageButton", Config, ScriptEditMenu)
+			end
+		end
+	end
+	
+	
+	local ExploitLabel = NewInstance("TextLabel", {
+		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 1, 0),
+		BackgroundTransparency = 1,
+		Font = Enum.Font.Ubuntu,
+		TextColor3 = c_ColorScheme.Text,
+		AutomaticSize = Enum.AutomaticSize.X,
+		Text = "Exploit: " .. u_HostExploit.Name,
+		TextSize = 15
+	}, InfoSubFrame)
 	
 	-----------------------
 	-- EVENTS MANAGEMENT --
@@ -390,30 +457,44 @@ do
 			Core:Destroy()
 		end))
 		
-		table.insert(u_Connections, ExecuteButton.MouseButton1Click:Connect(function()
-			l_Target.Execute()
-		end))
+		--table.insert(u_Connections, ExecuteButton.MouseButton1Click:Connect(function()
+		--	l_Target.Execute()
+		--end))
 	end
 	
 	-------------------------
 	-- LOAD & LINK SCRIPTS --
 	------------------------
 	do
+		local function SetToolbarButton(State, Name)
+			local Target = l_ScriptToolbarButtons[Name]
+			if State then
+				g_TweenService:Create(Target, c_SelectorColorTweening, {ImageColor3 = c_ColorScheme.ScriptList.ToolbarButtons[Name]}):Play()
+			else
+				g_TweenService:Create(Target, c_SelectorColorTweening, {ImageColor3 = c_ColorScheme.Disabled}):Play()
+			end
+			
+		end
+		
 		local function SetSelectedButton(Button, LoaderLambda)
-			if Button == l_Target.Button then
-				g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = Color3.fromRGB(100, 100, 100)}):Play()
-				l_Target.Button = nil
-				l_Target.Execute = nil
+			if Button == l_Selected.Button then
+				g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = c_ColorScheme.Selector.Idle}):Play()
+				l_Selected.Button = nil
+				l_Selected.Execute = nil
 				l_LockSelector = false
+				SetToolbarButton(false, "Execute")
+				SetToolbarButton(false, "Configs")
 				return
 			end
 			
 			l_LockSelector = false
 			l_SetSelectorTarget(Button)
+			SetToolbarButton(true, "Execute")
+			SetToolbarButton(true, "Configs")
 			l_LockSelector = true
-			l_Target.Button = Button
-			l_Target.Execute = LoaderLambda
-			g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = Color3.fromRGB(100, 200, 100)}):Play()
+			l_Selected.Button = Button
+			l_Selected.Execute = LoaderLambda
+			g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = c_ColorScheme.Selector.Select}):Play()
 		end
 		
 		local function CreateLabel(Text, Iteration)
@@ -424,7 +505,7 @@ do
 			Label.Size = UDim2.new(1, 0, 0, 15)
 			Label.TextColor3 = Color3.new(1, 1, 1)
 			Label.Font = Enum.Font.Ubuntu
-			Label.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+			Label.BackgroundColor3 = c_ColorScheme.ScriptList.LabelBackground
 			Label.BorderSizePixel = 0
 			Label.ZIndex = 2
 			AddToApplyTweenList(Label)
@@ -438,9 +519,9 @@ do
 			Button.Name = Iteration
 			Button.Font = Enum.Font.Ubuntu
 			Button.Size = c_ScriptButtonSize
-			Button.TextColor3 = c_ColorScheme.Button.Text
+			Button.TextColor3 = c_ColorScheme.ScriptList.Text
 			Button.BackgroundTransparency = 0.5
-			Button.BackgroundColor3 = c_ColorScheme.Button.Background
+			Button.BackgroundColor3 = c_ColorScheme.ScriptList.ButtonBackground
 			Button.AnchorPoint = Vector2.new(0.5, 0.5)
 			Button.BorderSizePixel = 0
 			Button.ZIndex = 2
