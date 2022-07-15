@@ -16,7 +16,8 @@ local c_Scripts = {
 local c_Exploits = {
 	{
 		Name = "Synapse X",
-		Checksums = {0x282CD0F6}
+		Checksums = {0x282CD0F6, 0x8C763513},
+		IID = 1
 	}
 }
 
@@ -122,7 +123,6 @@ do
 	local getgenv = getgenv or error("No Get Global Env Function")
 	
 	
-	
 	local function MakeExploitEnvString(Env)
 		local Result = ""
 		local Queue = {Env}
@@ -134,6 +134,7 @@ do
 		while #Queue > 0 do
 			Table = table.remove(Queue, 1)
 			for Name, Item in next, Table do
+				if type(Name) ~= "string" then continue end
 				Type = type(Item)
 				
 				if table.find(ForbiddenItems, Item) then
@@ -144,7 +145,7 @@ do
 					if Type == "table" then
 						table.insert(Queue, Item)
 					end
-					Result = Result .. Name .. "<".. type(Item) .. ">"
+					Result = Result .. Name .. "<"..Type .. ">"
 				end
 			end
 		end
@@ -152,10 +153,25 @@ do
 		return Result
 	end
 	
+	local Env = getgenv()
+	local PossibleExploits = {
+		1, -- Synapse
+	}
 	
-	local Checksum = m_Hashing.CRC32(MakeExploitEnvString(getgenv()))
+	-- Manual Checks
+	do
+		-- Synapse Check
+		if not Env.syn then
+			table.remove(PossibleExploits, table.find(PossibleExploits, 1))
+		else
+			Env = Env.syn -- Only Scan Env.syn Validity
+		end
+	end
+	
+	local Checksum = m_Hashing.CRC32(MakeExploitEnvString(Env))
 	--setclipboard(string.format("0x%X", Checksum))
 	
+	-- Do The Detection
 	do
 		-- Save Checksum In Case The Exploit Is Unknown
 		u_HostExploit.Checksums = {Checksum}
@@ -213,102 +229,125 @@ do
 		end
 	end
 	
-	-- Gui
-	local Core = NewInstance("ScreenGui", {IgnoreGuiInset = true})
+	------------------------
+	-- GUI INITIALIZATION --
+	------------------------
+	local
+	ScriptsSelectionFrame,
+	ToolbarMenu,
+	CloseButton,
+	MainFrame,
+	ScriptList,
+	Core
 	
-	local MainFrame = NewInstance("Frame", {
-		Size = UDim2.new(0, 400, 0, 330),
-		Position = UDim2.new(0.5, 0, 0.5, 0),
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		BackgroundColor3 = c_ColorScheme.Background,
-		BorderColor3 = Color3.new(1, 1, 1),
-		ClipsDescendants = true
-	}, Core)
-	AddToApplyTweenList(MainFrame)
-	
-	local InfoFrame = NewInstance("Frame", {
-		Size = UDim2.new(1, 0, 0, 29),
-		Position = UDim2.new(0, 0, 1, 0),
-		AnchorPoint = Vector2.new(0, 1),
-		BackgroundColor3 = c_ColorScheme.Background,
-		BorderColor3 = Color3.new(1, 1, 1),
-	}, MainFrame)
-	AddToApplyTweenList(InfoFrame)
-	
-	local InfoFrameListLayout = NewInstance("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Left,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 2)
-	}, InfoFrame)
-	
-	local InfoSubFrame = NewInstance("Frame", {
-		Size = UDim2.new(1, -80, 1, 0),
-		Position = UDim2.new(0, 0, 1, 0),
-		AnchorPoint = Vector2.new(0, 1),
-		BackgroundTransparency = 1,
-	}, InfoFrame)
-	
-	local CloseButton = NewInstance("TextButton", {
-		Size = UDim2.new(0, 80, 1, 0),
-		Font = Enum.Font.Ubuntu,
-		TextColor3 = c_ColorScheme.Text,
-		BackgroundColor3 = c_ColorScheme.Background,
-		BorderColor3 = c_ColorScheme.Borders,
-		Text = "Close",
-		TextScaled = true,
-		Active = false
-	}, InfoFrame)
-	
-	local Scripts = NewInstance("ScrollingFrame", {
-		Size = UDim2.new(0.3, 0, 1, -50),
-		TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
-		BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
-		CanvasSize = UDim2.new(0, 0, 0, 0),
-		VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Left,
-		BackgroundColor3 = c_ColorScheme.Background,
-		BorderColor3 = c_ColorScheme.Borders,
-		ScrollBarThickness = 3
-	}, MainFrame)
-	AddToApplyTweenList(Scripts)
-	
-	local ScriptsListLayout = NewInstance("UIListLayout", {
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		SortOrder = Enum.SortOrder.Name,
-		Padding = UDim.new(0, 2)
-	}, Scripts)
-	
-	local ScriptsSelectionFrame = NewInstance("Frame", {
-		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 0, 18),
-		Position = UDim2.new(-1, 0, 0, 0),
-		BackgroundColor3 = c_ColorScheme.Selector.Idle,
-		BorderSizePixel = 0,
-		BackgroundTransparency = 0.6,
-		ZIndex = 1
-	}, MainFrame)
-	AddToApplyTweenList(ScriptsSelectionFrame)
-	
-	local ScriptEditMenu = NewInstance("Frame", {
-		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 0, 20),
-		BorderSizePixel = 1,
-		BorderColor3 = c_ColorScheme.Borders,
-		BackgroundColor3 = c_ColorScheme.Background,
-		Position = UDim2.new(0, 0, 1, -30),
-		AnchorPoint = Vector2.new(0, 1)
-	}, MainFrame)
-	
-	local ScriptsEditMenuLayout = NewInstance("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		HorizontalAlignment = Enum.HorizontalAlignment.Center,
-		SortOrder = Enum.SortOrder.LayoutOrder,
-		Padding = UDim.new(0, 0)
-	}, ScriptEditMenu)
-	
-	-------------------------
-	-- SCRIPT EDIT BUTTONS --
-	-------------------------
 	do
-		local c_EditButtons = {
+		Core = NewInstance("ScreenGui", {IgnoreGuiInset = true})
+
+		MainFrame = NewInstance("Frame", {
+			Size = UDim2.new(0, 400, 0, 330),
+			Position = UDim2.new(0.5, 0, 0.5, 0),
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			BackgroundColor3 = c_ColorScheme.Background,
+			BorderColor3 = Color3.new(1, 1, 1),
+			ClipsDescendants = true
+		}, Core)
+		AddToApplyTweenList(MainFrame)
+
+		local InfoFrame = NewInstance("Frame", {
+			Size = UDim2.new(1, 0, 0, 29),
+			Position = UDim2.new(0, 0, 1, 0),
+			AnchorPoint = Vector2.new(0, 1),
+			BackgroundColor3 = c_ColorScheme.Background,
+			BorderColor3 = Color3.new(1, 1, 1),
+		}, MainFrame)
+		AddToApplyTweenList(InfoFrame)
+
+		local InfoFrameListLayout = NewInstance("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Left,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 2)
+		}, InfoFrame)
+
+		local InfoSubFrame = NewInstance("Frame", {
+			Size = UDim2.new(1, -80, 1, 0),
+			Position = UDim2.new(0, 0, 1, 0),
+			AnchorPoint = Vector2.new(0, 1),
+			BackgroundTransparency = 1,
+		}, InfoFrame)
+
+		CloseButton = NewInstance("TextButton", {
+			Size = UDim2.new(0, 80, 1, 0),
+			Font = Enum.Font.Ubuntu,
+			TextColor3 = c_ColorScheme.Text,
+			BackgroundColor3 = c_ColorScheme.Background,
+			BorderColor3 = c_ColorScheme.Borders,
+			Text = "Close",
+			TextScaled = true,
+			Active = false
+		}, InfoFrame)
+
+		ScriptList = NewInstance("ScrollingFrame", {
+			Size = UDim2.new(0.3, 0, 1, -50),
+			TopImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+			BottomImage = "rbxasset://textures/ui/Scroll/scroll-middle.png",
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Left,
+			BackgroundColor3 = c_ColorScheme.Background,
+			BorderColor3 = c_ColorScheme.Borders,
+			ScrollBarThickness = 3
+		}, MainFrame)
+		AddToApplyTweenList(ScriptList)
+
+		local ScriptsListLayout = NewInstance("UIListLayout", {
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.Name,
+			Padding = UDim.new(0, 2)
+		}, ScriptList)
+
+		ScriptsSelectionFrame = NewInstance("Frame", {
+			Size = UDim2.new(0, ScriptList.AbsoluteSize.X, 0, 18),
+			Position = UDim2.new(-1, 0, 0, 0),
+			BackgroundColor3 = c_ColorScheme.Selector.Idle,
+			BorderSizePixel = 0,
+			BackgroundTransparency = 0.6,
+			ZIndex = 1
+		}, MainFrame)
+		AddToApplyTweenList(ScriptsSelectionFrame)
+
+		ToolbarMenu = NewInstance("Frame", {
+			Size = UDim2.new(0, ScriptList.AbsoluteSize.X, 0, 20),
+			BorderSizePixel = 1,
+			BorderColor3 = c_ColorScheme.Borders,
+			BackgroundColor3 = c_ColorScheme.Background,
+			Position = UDim2.new(0, 0, 1, -30),
+			AnchorPoint = Vector2.new(0, 1)
+		}, MainFrame)
+
+		local ScriptsEditMenuLayout = NewInstance("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, 0)
+		}, ToolbarMenu)
+		
+		local ExploitLabel = NewInstance("TextLabel", {
+			Size = UDim2.new(0, ScriptList.AbsoluteSize.X, 1, 0),
+			BackgroundTransparency = 1,
+			Font = Enum.Font.Ubuntu,
+			TextColor3 = c_ColorScheme.Text,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Text = "Exploit: " .. u_HostExploit.Name,
+			TextSize = 15
+		}, InfoSubFrame)
+	end
+	
+	
+	---------------------
+	-- TOOLBAR BUTTONS --
+	---------------------
+	do
+		local c_ToolbarButtons = {
 			{
 				Image = "rbxassetid://3926307971",
 				Buttons = {
@@ -327,6 +366,7 @@ do
 			}
 		}
 		
+		
 		local Config = {
 			Size = UDim2.new(1, 0, 1, 0),
 			SizeConstraint = Enum.SizeConstraint.RelativeYY,
@@ -335,26 +375,16 @@ do
 		}
 		
 		
-		for _, ButtonSet in pairs(c_EditButtons) do
+		for _, ButtonSet in pairs(c_ToolbarButtons) do
 			Config.Image = ButtonSet.Image
 			for _, Button in pairs(ButtonSet.Buttons) do
 				Config.ImageRectOffset = Button[2]
 				Config.ImageColor3 = c_ColorScheme.Disabled
-				l_ScriptToolbarButtons[Button[1]] = NewInstance("ImageButton", Config, ScriptEditMenu)
+				l_ScriptToolbarButtons[Button[1]] = NewInstance("ImageButton", Config, ToolbarMenu)
 			end
 		end
 	end
 	
-	
-	local ExploitLabel = NewInstance("TextLabel", {
-		Size = UDim2.new(0, Scripts.AbsoluteSize.X, 1, 0),
-		BackgroundTransparency = 1,
-		Font = Enum.Font.Ubuntu,
-		TextColor3 = c_ColorScheme.Text,
-		AutomaticSize = Enum.AutomaticSize.X,
-		Text = "Exploit: " .. u_HostExploit.Name,
-		TextSize = 15
-	}, InfoSubFrame)
 	
 	-----------------------
 	-- EVENTS MANAGEMENT --
@@ -438,12 +468,12 @@ do
 			end)
 		end
 		
-		table.insert(u_Connections, Scripts.MouseEnter:Connect(function()
+		table.insert(u_Connections, ScriptList.MouseEnter:Connect(function()
 			l_IsInsideScripts = true
 			StartRunner()
 		end))
 		
-		table.insert(u_Connections, Scripts.MouseLeave:Connect(function()
+		table.insert(u_Connections, ScriptList.MouseLeave:Connect(function()
 			l_IsInsideScripts = false
 			l_RunnerConnection:Disconnect()
 			l_RunnerConnection = nil
@@ -456,10 +486,6 @@ do
 			end
 			Core:Destroy()
 		end))
-		
-		--table.insert(u_Connections, ExecuteButton.MouseButton1Click:Connect(function()
-		--	l_Target.Execute()
-		--end))
 	end
 	
 	-------------------------
@@ -497,68 +523,96 @@ do
 			g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = c_ColorScheme.Selector.Select}):Play()
 		end
 		
-		local function CreateLabel(Text, Iteration)
-			local Label = Instance.new("TextLabel", Scripts)
-			Label.Text = Text
-			Label.TextScaled = true
-			Label.Name = Iteration
-			Label.Size = UDim2.new(1, 0, 0, 15)
-			Label.TextColor3 = Color3.new(1, 1, 1)
-			Label.Font = Enum.Font.Ubuntu
-			Label.BackgroundColor3 = c_ColorScheme.ScriptList.LabelBackground
-			Label.BorderSizePixel = 0
-			Label.ZIndex = 2
-			AddToApplyTweenList(Label)
-			return Label
-		end
 		
-		local function CreateButton(ScriptInfo, Iteration)
-			local Button = Instance.new("TextButton", Scripts)
-			Button.Text = ScriptInfo[1] -- Name
-			Button.TextScaled = true
-			Button.Name = Iteration
-			Button.Font = Enum.Font.Ubuntu
-			Button.Size = c_ScriptButtonSize
-			Button.TextColor3 = c_ColorScheme.ScriptList.Text
-			Button.BackgroundTransparency = 0.5
-			Button.BackgroundColor3 = c_ColorScheme.ScriptList.ButtonBackground
-			Button.AnchorPoint = Vector2.new(0.5, 0.5)
-			Button.BorderSizePixel = 0
-			Button.ZIndex = 2
-			Button.AutoButtonColor = false
-			AddToApplyTweenList(Button)
-			table.insert(l_ScriptsButtons, Button)
-			
-			local ExecuteLambda = function() error("Execute Lambda Not Registered") end
-			
-			if ScriptInfo[3] == "REL" then
-				ExecuteLambda = function()
-					return LoadScript(HttpGet(c_RootPath .. ScriptInfo[2]))
+		-----------------------------
+		-- CREATE BUTTONS & LABELS --
+		-----------------------------
+		do
+			local function CreateLabel(Text, Iteration)
+				local Label = Instance.new("TextLabel", ScriptList)
+				Label.Text = Text
+				Label.TextScaled = true
+				Label.Name = Iteration
+				Label.Size = UDim2.new(1, 0, 0, 15)
+				Label.TextColor3 = Color3.new(1, 1, 1)
+				Label.Font = Enum.Font.Ubuntu
+				Label.BackgroundColor3 = c_ColorScheme.ScriptList.LabelBackground
+				Label.BorderSizePixel = 0
+				Label.ZIndex = 2
+				AddToApplyTweenList(Label)
+				return Label
+			end
+
+			local function CreateButton(ScriptInfo, Iteration)
+				local Button = Instance.new("TextButton", ScriptList)
+				Button.Text = ScriptInfo[1] -- Name
+				Button.TextScaled = true
+				Button.Name = Iteration
+				Button.Font = Enum.Font.Ubuntu
+				Button.Size = c_ScriptButtonSize
+				Button.TextColor3 = c_ColorScheme.ScriptList.Text
+				Button.BackgroundTransparency = 0.5
+				Button.BackgroundColor3 = c_ColorScheme.ScriptList.ButtonBackground
+				Button.AnchorPoint = Vector2.new(0.5, 0.5)
+				Button.BorderSizePixel = 0
+				Button.ZIndex = 2
+				Button.AutoButtonColor = false
+				AddToApplyTweenList(Button)
+				table.insert(l_ScriptsButtons, Button)
+
+				local ExecuteLambda = function() error("Execute Lambda Not Registered") end
+
+				if ScriptInfo[3] == "REL" then
+					ExecuteLambda = function()
+						return LoadScript(HttpGet(c_RootPath .. ScriptInfo[2]))
+					end
+				elseif ScriptInfo[3] == "URL" then
+					ExecuteLambda = function()
+						return LoadScript(HttpGet(ScriptInfo[2]))
+					end
+				elseif ScriptInfo[3] == "SRC" then
+					ExecuteLambda = function()
+						return LoadScript(ScriptInfo[2])
+					end
 				end
-			elseif ScriptInfo[3] == "URL" then
-				ExecuteLambda = function()
-					return LoadScript(HttpGet(ScriptInfo[2]))
-				end
-			elseif ScriptInfo[3] == "SRC" then
-				ExecuteLambda = function()
-					return LoadScript(ScriptInfo[2])
+
+				table.insert(u_Connections, Button.MouseButton1Click:Connect(function()
+					SetSelectedButton(Button, ExecuteLambda)
+				end))
+
+				return Button
+			end
+
+			for Iteration, ItemVal in pairs(c_Scripts) do
+				if ItemVal[2] == "LABEL" then
+					CreateLabel(ItemVal[1], Iteration)
+				else
+					CreateButton(ItemVal, Iteration)
 				end
 			end
-			
-			Button.MouseButton1Click:Connect(function()
-				SetSelectedButton(Button, ExecuteLambda)
-			end)
-			
-			return Button
 		end
 		
-		for Iteration, ItemVal in pairs(c_Scripts) do
-			if ItemVal[2] == "LABEL" then
-				CreateLabel(ItemVal[1], Iteration)
-			else
-				CreateButton(ItemVal, Iteration)
-			end
+		
+		
+		---------------------
+		-- TOOLBAR BUTTONS --
+		--------------------
+		do
+			local ExecutionDebounce = false
+			table.insert(u_Connections, l_ScriptToolbarButtons["Execute"].MouseButton1Click:Connect(function()
+				if ExecutionDebounce then return end
+				ExecutionDebounce = true
+				if l_LockSelector == true and l_Selected.Button then
+					g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = c_ColorScheme.Selector.Loading}):Play()
+					SetToolbarButton(false, "Execute")
+					pcall(l_Selected.Execute)
+					SetToolbarButton(true, "Execute")
+					g_TweenService:Create(ScriptsSelectionFrame, c_SelectorColorTweening, {BackgroundColor3 = c_ColorScheme.Selector.Select}):Play()
+				end
+				ExecutionDebounce = false
+			end))
 		end
+		
 	end
 	
 	
