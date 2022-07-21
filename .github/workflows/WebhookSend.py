@@ -16,8 +16,8 @@ def main():
           "color": 0x0DACE0,
           "fields": [
             {
-              "name": "Hub Version:",
-              "value": "V" + str(environ.get("GITHUB_RUN_NUMBER")),
+              "name": "Commit Number:",
+              "value": str(environ.get("GITHUB_RUN_NUMBER")),
             },
             {
               "name": "Commit Reason:",
