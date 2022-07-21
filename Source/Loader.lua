@@ -113,7 +113,7 @@ do
 	EPDTable.BaseLib.Exploit = u_HostExploit
 end
 
-local m_Hashing = c_GlobalEnv.EPD.BaseLib.Import("Libraries/Data/Hashing")
+local m_Hashing = c_GlobalEnv.EPD.BaseLib.LoadLibrary("Libraries/Data/Hashing")
 
 -----------------------
 -- EXPLOIT DETECTION --
@@ -168,7 +168,7 @@ do
 		end
 	end
 	
-	local Checksum = m_Hashing.CRC32(MakeExploitEnvString(Env))
+	local Checksum = m_Hashing.CRC.CRC32(MakeExploitEnvString(Env))
 	--setclipboard(string.format("0x%X", Checksum))
 	
 	-- Do The Detection
