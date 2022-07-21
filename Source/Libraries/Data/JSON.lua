@@ -8,7 +8,6 @@ local table_insert = table.insert
 local table_remove = table.remove
 
 function JSON.Encode(Input, CustomEncoders)
-	
 	local Buffer = ""
 	
 	local function EscapeString(String)
@@ -28,9 +27,10 @@ function JSON.Encode(Input, CustomEncoders)
 		ItemType = typeof(Item)
 		
 		if ItemName then
-			if type(ItemName) ~= "number" and tonumber(ItemName) then
+			if type(ItemName) == "number" then
+				print(ItemName)
 				-- [1] -> ["i1"]
-				ItemName = "i" .. ItemName
+				ItemName = "i" .. tostring(ItemName)
 			elseif tostring(ItemName):sub(1, 1) == "i" then
 				-- ["i1"] -> ["\i1"]
 				ItemName = "\\" .. ItemName
@@ -373,8 +373,9 @@ JSON.ParseItem = function(String, Index, ExtraList)
 end
 
 
-
 --[[
+	Decodes Some Table That Is In JSON Format
+	
 	Input<String> The String To Decode
 	CustomDecoders<Table> Custom Decoders Table, Index Should Be The Trigger Char, Example:
 	{
@@ -398,6 +399,40 @@ function JSON.Decode(Input, CustomDecoders)
 		DecodeError(Input, Index, "Bad Trailing")
 	end
 	return Result
+end
+
+
+--[[
+	Post Process Decoded Tables That Where Encoded With JSON.Encode
+--]]
+function JSON.PostProcess(Table)
+	local TodoTables = {Table}
+	
+	local function CleanTable(Input)
+		for Index, Value in pairs(Input) do
+			if type(Index) ~= "string" then continue end
+			
+			if Index:sub(1, 1) == "i" then
+				Input[tonumber(Index:sub(2, #Index))] = Value
+				Input[Index] = nil
+			elseif Index:sub(1, 1) == "\\" then
+				Input[Index:sub(2, #Index)] = Value
+				Input[Index] = nil
+			elseif tonumber(Index) then
+				Input[tonumber(Index)] = Value
+				Input[Index] = nil
+			end
+			if type(Value) == "table" then
+				table_insert(TodoTables, Value)
+			end
+		end
+	end
+	
+	while 0 < #TodoTables do
+		CleanTable(table_remove(TodoTables, #TodoTables))
+	end
+	
+	return Table
 end
 
 
