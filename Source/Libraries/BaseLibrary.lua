@@ -57,11 +57,20 @@ BaseLib.WriteFile =
 	writefile
 
 BaseLib.AppendFile = 
-	writefile
+	appendfile
 	or function(FileName, NewInfo) BaseLib.WriteFile(FileName, BaseLib.ReadFile(FileName) .. NewInfo) end
 
 BaseLib.IsFile = 
 	isfile
+
+BaseLib.GetFile = 
+	function(FilePath)
+		if BaseLib.IsFile(FilePath) then
+			return BaseLib.ReadFile(FilePath)
+		else
+			return false
+		end
+	end
 
 
 BaseLib.CreateFolder = 
