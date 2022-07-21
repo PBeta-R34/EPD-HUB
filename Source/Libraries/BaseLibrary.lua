@@ -1,11 +1,11 @@
 local BaseLib = {
 	-- Should Be Initialized By The Loader, But In Case It Isn't
 	RootPath = "https://raw.githubusercontent.com/PBeta-R34/EPD-HUB/main/Source/",
-	RelativePath = "",
 	Exploit = {
 		Name = "",
 		Checksums = {}
-	}
+	},
+	CachedLibraries = {}
 }
 
 BaseLib.SafeLoad = function(Source)
@@ -76,22 +76,23 @@ BaseLib.IsFolder =
 
 
 
-BaseLib.SetRelativePath = function(Relative)
-	if Relative:sub(#Relative, #Relative) ~= "//" then
-		Relative ..= "//"
+BaseLib.ImportFile = function(FilePath)
+	return BaseLib.HttpGet(BaseLib.RootPath .. FilePath)
+end
+
+BaseLib.Import = function(ModulePath)
+	return BaseLib.SafeLoad(BaseLib.ImportFile(ModulePath .. ".lua"))
+end
+
+BaseLib.LoadLibrary = function(LibraryPath)
+	if BaseLib.CachedLibraries[LibraryPath] then
+		return BaseLib.CachedLibraries[LibraryPath]
+	else
+		local NewLibrary = BaseLib.Import(LibraryPath)
+		BaseLib.CachedLibraries[LibraryPath] = NewLibrary
+		return NewLibrary
 	end
-	BaseLib.RelativePath = BaseLib.RootPath .. Relative
 end
-
-BaseLib.ImportFile = function(FilePath, UseRelative)
-	return BaseLib.HttpGet(((UseRelative and BaseLib.RelativePath) or BaseLib.RootPath) .. FilePath)
-end
-
-BaseLib.Import = function(ModulePath, UseRelative)
-	return BaseLib.SafeLoad(BaseLib.ImportFile(ModulePath .. ".lua", UseRelative))
-end
-
-
 
 
 
