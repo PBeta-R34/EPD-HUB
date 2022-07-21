@@ -6,7 +6,7 @@ from os import environ
 def main():
   if environ.get("GITHUB_ENV", None):
     Data = {
-      "username": "EPD Documentation Update",
+      "username": "EPD Hub Update",
       "content": environ.get("PingTag"),
       "embeds": [
         {
