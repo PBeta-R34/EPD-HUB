@@ -1,7 +1,10 @@
 --[[
 	Algorithms Supported:
-	CRC32, CRC64
-	BLAKE-256, BLAKE-512, BLAKE2s, BLAKE2b, BLAKE3
+	CRC8, CRC8-CCITT, CRC8-MAXIM
+	CRC16-IBM, CRC16-DNP, CRC16-CCITT
+	CRC32, CRC32-C, CRC32-K
+	CRC64 Algorithms Are WIP
+	TODO: BLAKE-256, BLAKE-512, BLAKE2s, BLAKE2b, BLAKE3
 --]]
 local Hashing = {}
 
@@ -18,7 +21,52 @@ local bnot 	= bit32.bnot 	-- !
 local band 	= bit32.band 	-- &
 local bor 	= bit32.bor 	-- |
 
-function ApplyOnString(String, Function, ...)
+
+--[[
+--<DEBUG>--
+local TableId = 0
+function DBG_SaveCRCLookupTable(Table, Header, RowWidth, FileName)
+	RowWidth = RowWidth or 8
+	FileName = FileName or "CRCLookupTable"
+	
+	local Output = (Header and Header .. "\n") or ""
+	for Index, Value in pairs(Table) do
+		Output ..= string.format("0x%X ", Value)
+		if Index % RowWidth == 0 then
+			Output ..= "\n"
+		end
+	end
+	TableId += 1
+	writefile(FileName .. "-" .. tostring(TableId) .. ".txt", Output)
+end
+
+--]]
+
+
+local function MakeBitset(Size)
+	local OutputValue = 1
+	for _=1, Size - 1 do
+		OutputValue = blsh(OutputValue, 1) + 1
+	end
+	return OutputValue
+end
+
+--[[PRECOMP<FLAGS<INLINE, CONST_OPTIMIZE>>]]
+function BinaryReflect(Number, Size)
+	
+	local Result = 0x00
+	for i=0, Size - 1 do
+		-- Number & (1 << i)
+		if band(Number, blsh(1, i)) ~= 0 then
+			--Result = Result | (1 << ((Size - 1) - i))
+			Result = bor(Result, blsh(1, ((Size - 1) - i)))
+		end
+	end
+	
+	return Result
+end
+
+local function ApplyOnString(String, Function, ...)
 	local Output = ""
 	for Index=1, #String do
 		Output ..= string_char(Function(string_byte(String, Index), ...))
@@ -27,7 +75,7 @@ function ApplyOnString(String, Function, ...)
 end
 
 
-function DualApplyOnString(String1, String2, Function)
+local function DualApplyOnString(String1, String2, Function)
 	local Output = ""
 	for Index=1, #String1 do
 		Output ..= string_char(Function(string_byte(String1, Index), string_byte(String2, Index)))
@@ -35,251 +83,301 @@ function DualApplyOnString(String1, String2, Function)
 	return Output
 end
 
-function Hashing.BinStringToUInt(String, Size, Offset)
-	String = string_reverse(String)
-	Offset = Offset or 0
-	local Output = 0
-	for Index=1, Size do
-		Output = blsh(Output, 8)
-		Output += string_byte(String, Index + Offset)
-	end
-	return Output
-end
-
-function Hashing.UIntToBinString(Value)
-	local Output = ""
-	while Value > 0 do
-		Output ..= string_char(band(0xFF, Value))
-		Value = brsh(Value, 8)
-	end
-	return Output
-end
 
 ------------------------------
 -- Cyclic Redundancy Checks --
 ------------------------------
+do
+	Hashing.CRC = {}
+	
+	function Hashing.CRC.GenerateCRCLookupTable(Polynomial, Width, ReflectPolynomial, Reflected, Table, Len)
+		Table = Table or {}
+		Len = Len or 0xFF
+		ReflectPolynomial = ReflectPolynomial or false
+		
+		Polynomial = (ReflectPolynomial == true and BinaryReflect(Polynomial, Width)) or Polynomial
+		
+		if Width < 8 then
+			Width = 8
+		end
+		local CastMask = MakeBitset(Width)
+		local MSBMask = blsh(0x01, (Width - 1))
+		local Remainder = 0
+		
+		--print(string.format("Width: %d MSBMask: 0x%X CastMask: 0x%X", Width, MSBMask, CastMask))
+		
+		for Dividend=0, Len do
+			
+			Remainder = band(
+				blsh(
+					(Reflected and BinaryReflect(Dividend, 8)) or Dividend,
+					(Width - 8)
+				),
+				CastMask
+			)
 
-local CRC32Table = {
-	0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3,
-	0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988, 0x09B64C2B, 0x7EB17CBD, 0xE7B82D07, 0x90BF1D91,
-	0x1DB71064, 0x6AB020F2, 0xF3B97148, 0x84BE41DE, 0x1ADAD47D, 0x6DDDE4EB, 0xF4D4B551, 0x83D385C7,
-	0x136C9856, 0x646BA8C0, 0xFD62F97A, 0x8A65C9EC, 0x14015C4F, 0x63066CD9, 0xFA0F3D63, 0x8D080DF5,
-	0x3B6E20C8, 0x4C69105E, 0xD56041E4, 0xA2677172, 0x3C03E4D1, 0x4B04D447, 0xD20D85FD, 0xA50AB56B,
-	0x35B5A8FA, 0x42B2986C, 0xDBBBC9D6, 0xACBCF940, 0x32D86CE3, 0x45DF5C75, 0xDCD60DCF, 0xABD13D59,
-	0x26D930AC, 0x51DE003A, 0xC8D75180, 0xBFD06116, 0x21B4F4B5, 0x56B3C423, 0xCFBA9599, 0xB8BDA50F,
-	0x2802B89E, 0x5F058808, 0xC60CD9B2, 0xB10BE924, 0x2F6F7C87, 0x58684C11, 0xC1611DAB, 0xB6662D3D,
-	0x76DC4190, 0x01DB7106, 0x98D220BC, 0xEFD5102A, 0x71B18589, 0x06B6B51F, 0x9FBFE4A5, 0xE8B8D433,
-	0x7807C9A2, 0x0F00F934, 0x9609A88E, 0xE10E9818, 0x7F6A0DBB, 0x086D3D2D, 0x91646C97, 0xE6635C01,
-	0x6B6B51F4, 0x1C6C6162, 0x856530D8, 0xF262004E, 0x6C0695ED, 0x1B01A57B, 0x8208F4C1, 0xF50FC457,
-	0x65B0D9C6, 0x12B7E950, 0x8BBEB8EA, 0xFCB9887C, 0x62DD1DDF, 0x15DA2D49, 0x8CD37CF3, 0xFBD44C65,
-	0x4DB26158, 0x3AB551CE, 0xA3BC0074, 0xD4BB30E2, 0x4ADFA541, 0x3DD895D7, 0xA4D1C46D, 0xD3D6F4FB,
-	0x4369E96A, 0x346ED9FC, 0xAD678846, 0xDA60B8D0, 0x44042D73, 0x33031DE5, 0xAA0A4C5F, 0xDD0D7CC9,
-	0x5005713C, 0x270241AA, 0xBE0B1010, 0xC90C2086, 0x5768B525, 0x206F85B3, 0xB966D409, 0xCE61E49F,
-	0x5EDEF90E, 0x29D9C998, 0xB0D09822, 0xC7D7A8B4, 0x59B33D17, 0x2EB40D81, 0xB7BD5C3B, 0xC0BA6CAD,
-	0xEDB88320, 0x9ABFB3B6, 0x03B6E20C, 0x74B1D29A, 0xEAD54739, 0x9DD277AF, 0x04DB2615, 0x73DC1683,
-	0xE3630B12, 0x94643B84, 0x0D6D6A3E, 0x7A6A5AA8, 0xE40ECF0B, 0x9309FF9D, 0x0A00AE27, 0x7D079EB1,
-	0xF00F9344, 0x8708A3D2, 0x1E01F268, 0x6906C2FE, 0xF762575D, 0x806567CB, 0x196C3671, 0x6E6B06E7,
-	0xFED41B76, 0x89D32BE0, 0x10DA7A5A, 0x67DD4ACC, 0xF9B9DF6F, 0x8EBEEFF9, 0x17B7BE43, 0x60B08ED5,
-	0xD6D6A3E8, 0xA1D1937E, 0x38D8C2C4, 0x4FDFF252, 0xD1BB67F1, 0xA6BC5767, 0x3FB506DD, 0x48B2364B,
-	0xD80D2BDA, 0xAF0A1B4C, 0x36034AF6, 0x41047A60, 0xDF60EFC3, 0xA867DF55, 0x316E8EEF, 0x4669BE79,
-	0xCB61B38C, 0xBC66831A, 0x256FD2A0, 0x5268E236, 0xCC0C7795, 0xBB0B4703, 0x220216B9, 0x5505262F,
-	0xC5BA3BBE, 0xB2BD0B28, 0x2BB45A92, 0x5CB36A04, 0xC2D7FFA7, 0xB5D0CF31, 0x2CD99E8B, 0x5BDEAE1D,
-	0x9B64C2B0, 0xEC63F226, 0x756AA39C, 0x026D930A, 0x9C0906A9, 0xEB0E363F, 0x72076785, 0x05005713,
-	0x95BF4A82, 0xE2B87A14, 0x7BB12BAE, 0x0CB61B38, 0x92D28E9B, 0xE5D5BE0D, 0x7CDCEFB7, 0x0BDBDF21,
-	0x86D3D2D4, 0xF1D4E242, 0x68DDB3F8, 0x1FDA836E, 0x81BE16CD, 0xF6B9265B, 0x6FB077E1, 0x18B74777,
-	0x88085AE6, 0xFF0F6A70, 0x66063BCA, 0x11010B5C, 0x8F659EFF, 0xF862AE69, 0x616BFFD3, 0x166CCF45,
-	0xA00AE278, 0xD70DD2EE, 0x4E048354, 0x3903B3C2, 0xA7672661, 0xD06016F7, 0x4969474D, 0x3E6E77DB,
-	0xAED16A4A, 0xD9D65ADC, 0x40DF0B66, 0x37D83BF0, 0xA9BCAE53, 0xDEBB9EC5, 0x47B2CF7F, 0x30B5FFE9,
-	0xBDBDF21C, 0xCABAC28A, 0x53B39330, 0x24B4A3A6, 0xBAD03605, 0xCDD70693, 0x54DE5729, 0x23D967BF,
-	0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94, 0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
-}
-local CRC64Table = {
-	"\00\00\00\00\00\00\00\00","\121\137\53\48\200\112\216\122",
-	"\242\18\107\96\144\225\176\245","\139\155\94\80\88\145\104\143",
-	"\143\182\65\152\115\229\56\192","\246\63\116\168\187\149\224\186",
-	"\125\164\42\248\227\4\136\53","\4\45\31\200\43\116\80\79",
-	"\117\254\20\104\180\236\40\171","\12\119\33\88\124\156\240\209",
-	"\135\236\127\8\36\13\152\94","\254\101\74\56\236\125\64\36",
-	"\250\72\85\240\199\9\16\107","\131\193\96\192\15\121\200\17",
-	"\8\90\62\144\87\232\160\158","\113\211\11\160\159\152\120\228",
-	"\129\111\190\136\59\255\8\125","\248\230\139\184\243\143\208\7",
-	"\115\125\213\232\171\30\184\136","\10\244\224\216\99\110\96\242",
-	"\14\217\255\16\72\26\48\189","\119\80\202\32\128\106\232\199",
-	"\252\203\148\112\216\251\128\72","\133\66\161\64\16\139\88\50",
-	"\244\145\170\224\143\19\32\214","\141\24\159\208\71\99\248\172",
-	"\6\131\193\128\31\242\144\35","\127\10\244\176\215\130\72\89",
-	"\123\39\235\120\252\246\24\22","\2\174\222\72\52\134\192\108",
-	"\137\53\128\24\108\23\168\227","\240\188\181\40\164\103\112\153",
-	"\2\223\124\17\119\254\17\250","\123\86\73\33\191\142\201\128",
-	"\240\205\23\113\231\31\161\15","\137\68\34\65\47\111\121\117",
-	"\141\105\61\137\4\27\41\58","\244\224\8\185\204\107\241\64",
-	"\127\123\86\233\148\250\153\207","\6\242\99\217\92\138\65\181",
-	"\119\33\104\121\195\18\57\81","\14\168\93\73\11\98\225\43",
-	"\133\51\3\25\83\243\137\164","\252\186\54\41\155\131\81\222",
-	"\248\151\41\225\176\247\1\145","\129\30\28\209\120\135\217\235",
-	"\10\133\66\129\32\22\177\100","\115\12\119\177\232\102\105\30",
-	"\131\176\194\153\76\1\25\135","\250\57\247\169\132\113\193\253",
-	"\113\162\169\249\220\224\169\114","\8\43\156\201\20\144\113\8",
-	"\12\6\131\1\63\228\33\71","\117\143\182\49\247\148\249\61",
-	"\254\20\232\97\175\5\145\178","\135\157\221\81\103\117\73\200",
-	"\246\78\214\241\248\237\49\44","\143\199\227\193\48\157\233\86",
-	"\4\92\189\145\104\12\129\217","\125\213\136\161\160\124\89\163",
-	"\121\248\151\105\139\8\9\236","\0\113\162\89\67\120\209\150",
-	"\139\234\252\9\27\233\185\25","\242\99\201\57\211\153\97\99",
-	"\111\45\110\122\189\218\122\223","\22\164\91\74\117\170\162\165",
-	"\157\63\5\26\45\59\202\42","\228\182\48\42\229\75\18\80",
-	"\224\155\47\226\206\63\66\31","\153\18\26\210\6\79\154\101",
-	"\18\137\68\130\94\222\242\234","\107\0\113\178\150\174\42\144",
-	"\26\211\122\18\9\54\82\116","\99\90\79\34\193\70\138\14",
-	"\232\193\17\114\153\215\226\129","\145\72\36\66\81\167\58\251",
-	"\149\101\59\138\122\211\106\180","\236\236\14\186\178\163\178\206",
-	"\103\119\80\234\234\50\218\65","\30\254\101\218\34\66\2\59",
-	"\238\66\208\242\134\37\114\162","\151\203\229\194\78\85\170\216",
-	"\28\80\187\146\22\196\194\87","\101\217\142\162\222\180\26\45",
-	"\97\244\145\106\245\192\74\98","\24\125\164\90\61\176\146\24",
-	"\147\230\250\10\101\33\250\151","\234\111\207\58\173\81\34\237",
-	"\155\188\196\154\50\201\90\9","\226\53\241\170\250\185\130\115",
-	"\105\174\175\250\162\40\234\252","\16\39\154\202\106\88\50\134",
-	"\20\10\133\2\65\44\98\201","\109\131\176\50\137\92\186\179",
-	"\230\24\238\98\209\205\210\60","\159\145\219\82\25\189\10\70",
-	"\109\242\18\107\202\36\107\37","\20\123\39\91\2\84\179\95",
-	"\159\224\121\11\90\197\219\208","\230\105\76\59\146\181\3\170",
-	"\226\68\83\243\185\193\83\229","\155\205\102\195\113\177\139\159",
-	"\16\86\56\147\41\32\227\16","\105\223\13\163\225\80\59\106",
-	"\24\12\6\3\126\200\67\142","\97\133\51\51\182\184\155\244",
-	"\234\30\109\99\238\41\243\123","\147\151\88\83\38\89\43\1",
-	"\151\186\71\155\13\45\123\78","\238\51\114\171\197\93\163\52",
-	"\101\168\44\251\157\204\203\187","\28\33\25\203\85\188\19\193",
-	"\236\157\172\227\241\219\99\88","\149\20\153\211\57\171\187\34",
-	"\30\143\199\131\97\58\211\173","\103\6\242\179\169\74\11\215",
-	"\99\43\237\123\130\62\91\152","\26\162\216\75\74\78\131\226",
-	"\145\57\134\27\18\223\235\109","\232\176\179\43\218\175\51\23",
-	"\153\99\184\139\69\55\75\243","\224\234\141\187\141\71\147\137",
-	"\107\113\211\235\213\214\251\6","\18\248\230\219\29\166\35\124",
-	"\22\213\249\19\54\210\115\51","\111\92\204\35\254\162\171\73",
-	"\228\199\146\115\166\51\195\198","\157\78\167\67\110\67\27\188",
-	"\181\201\75\172\41\147\172\149","\204\64\126\156\225\227\116\239",
-	"\71\219\32\204\185\114\28\96","\62\82\21\252\113\2\196\26",
-	"\58\127\10\52\90\118\148\85","\67\246\63\4\146\6\76\47",
-	"\200\109\97\84\202\151\36\160","\177\228\84\100\2\231\252\218",
-	"\192\55\95\196\157\127\132\62","\185\190\106\244\85\15\92\68",
-	"\50\37\52\164\13\158\52\203","\75\172\1\148\197\238\236\177",
-	"\79\129\30\92\238\154\188\254","\54\8\43\108\38\234\100\132",
-	"\189\147\117\60\126\123\12\11","\196\26\64\12\182\11\212\113",
-	"\52\166\245\36\18\108\164\232","\77\47\192\20\218\28\124\146",
-	"\198\180\158\68\130\141\20\29","\191\61\171\116\74\253\204\103",
-	"\187\16\180\188\97\137\156\40","\194\153\129\140\169\249\68\82",
-	"\73\2\223\220\241\104\44\221","\48\139\234\236\57\24\244\167",
-	"\65\88\225\76\166\128\140\67","\56\209\212\124\110\240\84\57",
-	"\179\74\138\44\54\97\60\182","\202\195\191\28\254\17\228\204",
-	"\206\238\160\212\213\101\180\131","\183\103\149\228\29\21\108\249",
-	"\60\252\203\180\69\132\4\118","\69\117\254\132\141\244\220\12",
-	"\183\22\55\189\94\109\189\111","\206\159\2\141\150\29\101\21",
-	"\69\4\92\221\206\140\13\154","\60\141\105\237\6\252\213\224",
-	"\56\160\118\37\45\136\133\175","\65\41\67\21\229\248\93\213",
-	"\202\178\29\69\189\105\53\90","\179\59\40\117\117\25\237\32",
-	"\194\232\35\213\234\129\149\196","\187\97\22\229\34\241\77\190",
-	"\48\250\72\181\122\96\37\49","\73\115\125\133\178\16\253\75",
-	"\77\94\98\77\153\100\173\4","\52\215\87\125\81\20\117\126",
-	"\191\76\9\45\9\133\29\241","\198\197\60\29\193\245\197\139",
-	"\54\121\137\53\101\146\181\18","\79\240\188\5\173\226\109\104",
-	"\196\107\226\85\245\115\5\231","\189\226\215\101\61\3\221\157",
-	"\185\207\200\173\22\119\141\210","\192\70\253\157\222\7\85\168",
-	"\75\221\163\205\134\150\61\39","\50\84\150\253\78\230\229\93",
-	"\67\135\157\93\209\126\157\185","\58\14\168\109\25\14\69\195",
-	"\177\149\246\61\65\159\45\76","\200\28\195\13\137\239\245\54",
-	"\204\49\220\197\162\155\165\121","\181\184\233\245\106\235\125\3",
-	"\62\35\183\165\50\122\21\140","\71\170\130\149\250\10\205\246",
-	"\218\228\37\214\148\73\214\74","\163\109\16\230\92\57\14\48",
-	"\40\246\78\182\4\168\102\191","\81\127\123\134\204\216\190\197",
-	"\85\82\100\78\231\172\238\138","\44\219\81\126\47\220\54\240",
-	"\167\64\15\46\119\77\94\127","\222\201\58\30\191\61\134\5",
-	"\175\26\49\190\32\165\254\225","\214\147\4\142\232\213\38\155",
-	"\93\8\90\222\176\68\78\20","\36\129\111\238\120\52\150\110",
-	"\32\172\112\38\83\64\198\33","\89\37\69\22\155\48\30\91",
-	"\210\190\27\70\195\161\118\212","\171\55\46\118\11\209\174\174",
-	"\91\139\155\94\175\182\222\55","\34\2\174\110\103\198\6\77",
-	"\169\153\240\62\63\87\110\194","\208\16\197\14\247\39\182\184",
-	"\212\61\218\198\220\83\230\247","\173\180\239\246\20\35\62\141",
-	"\38\47\177\166\76\178\86\2","\95\166\132\150\132\194\142\120",
-	"\46\117\143\54\27\90\246\156","\87\252\186\6\211\42\46\230",
-	"\220\103\228\86\139\187\70\105","\165\238\209\102\67\203\158\19",
-	"\161\195\206\174\104\191\206\92","\216\74\251\158\160\207\22\38",
-	"\83\209\165\206\248\94\126\169","\42\88\144\254\48\46\166\211",
-	"\216\59\89\199\227\183\199\176","\161\178\108\247\43\199\31\202",
-	"\42\41\50\167\115\86\119\69","\83\160\7\151\187\38\175\63",
-	"\87\141\24\95\144\82\255\112","\46\4\45\111\88\34\39\10",
-	"\165\159\115\63\0\179\79\133","\220\22\70\15\200\195\151\255",
-	"\173\197\77\175\87\91\239\27","\212\76\120\159\159\43\55\97",
-	"\95\215\38\207\199\186\95\238","\38\94\19\255\15\202\135\148",
-	"\34\115\12\55\36\190\215\219","\91\250\57\7\236\206\15\161",
-	"\208\97\103\87\180\95\103\46","\169\232\82\103\124\47\191\84",
-	"\89\84\231\79\216\72\207\205","\32\221\210\127\16\56\23\183",
-	"\171\70\140\47\72\169\127\56","\210\207\185\31\128\217\167\66",
-	"\214\226\166\215\171\173\247\13","\175\107\147\231\99\221\47\119",
-	"\36\240\205\183\59\76\71\248","\93\121\248\135\243\60\159\130",
-	"\44\170\243\39\108\164\231\102","\85\35\198\23\164\212\63\28",
-	"\222\184\152\71\252\69\87\147","\167\49\173\119\52\53\143\233",
-	"\163\28\178\191\31\65\223\166","\218\149\135\143\215\49\7\220",
-	"\81\14\217\223\143\160\111\83","\40\135\236\239\71\208\183\41"
-}
+			for _=1, 8 do
+				if band(Remainder, MSBMask) ~= 0 then
+					Remainder = bxor(blsh(Remainder, 1), Polynomial)
+				else
+					Remainder = blsh(Remainder, 1)
+				end
+			end
+			Table[Dividend + 1] = band((Reflected and BinaryReflect(Remainder, Width)) or Remainder, CastMask)
+		end
 
-
-function Hashing.CRC32(Input)
-	local CRC = 0xFFFFFFFF
-	for Index=1, #Input do
-		CRC = bxor(
-			CRC32Table[band(bxor(CRC, string_byte(Input, Index)), 0xFF) + 1],
-			brsh(CRC, 8)
-		)
+		return Table
 	end
-	CRC = bxor(CRC, 0xFFFFFFFF)
-	return CRC
+
+	-- Basic Modular CRC Implementation, Supports Up To 52 Bits
+	function Hashing.CRC.InvertedCRC52(Input, Initial, XOROut, LookupTable)
+		local CRC = Initial
+		
+		for Index=1, #Input do
+			CRC = bxor(
+				LookupTable[band(bxor(CRC, string_byte(Input, Index)), 0xFF) + 1],
+				brsh(CRC, 8)
+			)
+			
+		end
+
+		return bxor(CRC, XOROut)
+	end
+	
+	--[[
+	function Hashing.CRC.NormalCRC52(Input, Initial, XOROut, LookupTable, Width)
+		local CRC = Initial
+		local Len = Width - 8
+		
+		for Index=1, #Input do
+			CRC = bxor(
+				blsh(CRC, 8),
+				LookupTable[band(bxor(brsh(CRC, Len), string_byte(Input, Index)), 0xFF) + 1]
+			)
+		end
+		
+		return bxor(CRC, XOROut)
+	end
+	--]]
+	
+	do
+		local IntegrityCheck = "ABCDEF"
+
+	--[[
+	Table Format:
+	{
+		Name<String>: CRC Function Name
+		Description<String>: Description For What It Is/Was Used
+		
+		Initial<Integer/String>: Initial Value For The CRC
+		XOROut<Integer/String>: The Value Used To XOR The Output
+		
+		Polynomial<{<Integer/String>, <Bool>}>: Polynomial Seed, And Reflect The Polynomial
+		Reflect<{Refin<Bool>, Refout<Bool>}>: If It Should Reflect The Input/Output
+		Width<Integer>: CRC Size(In Bits)
+		
+		IntegrityCheck<Integer/String>: What The Output Should Be When The Input Is The 'IntegrityCheck' Variable
+		
+		NOTE: 'Polynomial', 'IntegrityCheck', 'Initial', And The 'XOROut' Variables Should Be A Binary String If The CRC Is Bigger Than 52 Bits
+		NOTE: The 'Initial' And 'XOROut' Variable Will Be Assumed As 0 Or "\00" If Not Defined
+	}
+	--]]
+		local Implementations = {
+			{
+				Name = "CRC8",
+				Description = "DVB-S2",
+				-- CRC Info
+				Polynomial 	= {0x07, false},
+				Reflect		= {false, false},
+				Width 		= 8,
+
+				IntegrityCheck = 0x10
+			},
+			{
+				Name = "CRC8_CCITT",
+				Description = "ITU-T I.432.1 (02/99); ATM HEC, ISDN HEC And Cell Delineation, SMBus PEC",
+				-- CRC Info
+				Initial = 0x00,
+				XOROut = 0x55,
+
+				Polynomial 	= {0x07, false},
+				Reflect		= {false, false},
+				Width 		= 8,
+
+				IntegrityCheck = 0x45
+			},
+			{
+				Name = "CRC8_MAXIM",
+				Description = "1-Wire, Bus",
+				-- CRC Info
+				Polynomial 	= {0x31, false},
+				Reflect		= {true, true},
+				Width 		= 8,
+
+				IntegrityCheck = 0x10
+			},
+			
+			{
+				Name = "CRC16_IBM",
+				Description = "Bisync, Modbus, USB, ANSI X3.28, SIA DC-07, Many Others; Also Known As CRC-16 And CRC-16-ANSI",
+				-- CRC Info
+				Polynomial 	= {0x8005, false},
+				Reflect		= {true, true},
+				Width 		= 16,
+
+				IntegrityCheck = 0xED91
+			},
+			{
+				Name = "CRC16_DNP",
+				Description = "DNP, IEC 870, M-Bus",
+				-- CRC Info
+				XOROut = 0xFFFF,
+				
+				Polynomial 	= {0x3D65, false},
+				Reflect		= {true, true},
+				Width 		= 16,
+
+				IntegrityCheck = 0xA546
+			},
+			{
+				Name = "CRC16_CCITT",
+				Description = "X.25, V.41, HDLC FCS, XMODEM, Bluetooth, PACTOR, SD, DigRF, Many Others; Known As CRC-CCITT",
+				-- CRC Info
+				Polynomial 	= {0x1021, false},
+				Reflect		= {true, true},
+				Width 		= 16,
+
+				IntegrityCheck = 0x98D1
+			},
+			
+			{
+				Name = "CRC32",
+				Description = "ISO 3309 (HDLC), ANSI X3.66 (ADCCP), FIPS PUB 71, FED-STD-1003, ITU-T V.42, ISO/IEC/IEEE 802-3 (Ethernet), SATA, MPEG-2, PKZIP, Gzip, Bzip2, POSIX cksum, PNG, ZMODEM, Many Others",
+				-- CRC Info
+				Initial = 0xFFFFFFFF,
+				XOROut = 0xFFFFFFFF,
+				
+				Polynomial 	= {0x04C11DB7, false},
+				Reflect		= {true, true},
+				Width 		= 32,
+
+				IntegrityCheck = 0xBB76FE69
+			},
+			{
+				Name = "CRC32_C",
+				Description = "iSCSI, SCTP, G.hn Payload, SSE4.2, Btrfs, ext4, Ceph",
+				-- CRC Info
+				Initial = 0xFFFFFFFF,
+				XOROut = 0xFFFFFFFF,
+
+				Polynomial 	= {0x1EDC6F41, false},
+				Reflect		= {true, true},
+				Width 		= 32,
+
+				IntegrityCheck = 0xA4B7CE68
+			},
+			{
+				Name = "CRC32_K",
+				Description = "Excellent At Ethernet Frame Length, Poor Performance With Long Files",
+				-- CRC Info
+				Initial = 0xFFFFFFFF,
+				XOROut = 0xFFFFFFFF,
+
+				Polynomial 	= {0x741B8CD7, false},
+				Reflect		= {true, true},
+				Width 		= 32,
+
+				IntegrityCheck = 0xECE2DB2D
+			},
+			--[[ TODO: Fix
+			{
+				Name = "CRC32_MPEG2",
+				Description = "Excellent At Ethernet Frame Length, Poor Performance With Long Files",
+				-- CRC Info
+				Initial = 0xFFFFFFFF,
+
+				Polynomial 	= {0x04C11DB7, false},
+				Reflect		= {false, false},
+				Width 		= 32,
+
+				IntegrityCheck = 0x5D516EE7
+			},
+			--]]
+		}
+		
+		
+		--DBG_SaveCRCLookupTable(Hashing.CRC.GenerateCRCLookupTable(0x04C11DB7, 32, false, false), "TABLE", 8)
+		
+
+		local InvertedCRC52 = Hashing.CRC.InvertedCRC52
+		local NormalCRC52 = Hashing.CRC.NormalCRC52
+		
+		for _, Item in pairs(Implementations) do
+			if Item.Width > 52 then
+				error("CRCs Bigger Than 52-Bits Are Not Supported Yet.")
+			else
+				local Initial = Item.Initial or 0
+				local XOROut = Item.XOROut or 0
+				local Width = Item.Width
+				local RefIn, RefOut = Item.Reflect[1], Item.Reflect[2]
+				local LookupTable = Hashing.CRC.GenerateCRCLookupTable(Item.Polynomial[1], Width, Item.Polynomial[2], RefIn)
+				
+				--DBG_SaveCRCLookupTable(LookupTable, Item.Name, 16, Item.Name)
+				
+				local CRCFunc = nil
+				
+				CRCFunc = function(Data) return InvertedCRC52(Data, Initial, XOROut, LookupTable) end
+				
+				
+				
+				Hashing.CRC[Item.Name] = CRCFunc
+				
+				local ICResult = CRCFunc(IntegrityCheck)
+				assert(
+					ICResult == Item.IntegrityCheck,
+					" Integrity Check Failed For CRC: '" .. Item.Name .. "' " .. string.format("Expected: 0x%X Got: 0x%X", Item.IntegrityCheck, ICResult)
+				)
+				--print("Sucessfully Loaded CRC: '" .. Item.Name .. "'")
+			end
+			
+		end
+
+
+	end
 end
 
--- TODO: Fix...
-function Hashing.CRC64(Input)
-	-- Luau Won't XOR A 64-BIT Value, So We Use A String
-	local CRC = "\00\00\00\00\00\00\00\00" -- "\255\255\255\255\255\255\255\255" "\00\00\00\00\00\00\00\00"
-	for Index=1, #Input do
-		CRC = DualApplyOnString(
-			string_sub(CRC, 2, 8) .. "\00", -- Act As CRC << 8
-			CRC64Table[bxor(string_byte(CRC, 1), string_byte(Input, Index)) + 1],
-			bxor -- (CRC << 8) XOR Key
-		)
-	end
-	assert(#CRC * 8 == 64, "CRC Result Was Not 64-BITS But " .. tostring(#CRC * 8) .. "-BITS")
-	--CRC = ApplyOnString(CRC, bxor, 0xFF)
-	return CRC
-end
+
 
 
 -----------
 -- BLAKE --
 -----------
+do
+	local BLAKE2b_BlockLen = 128
+	local BLAKE2b_Rounds = 12
+	local BLAKE2b_IV = {
+		"\8\201\188\243\103\230\9\106", "\59\167\202\132\133\174\103\187",
+		"\43\248\148\254\114\243\110\60", "\241\54\29\95\58\245\79\165",
+		"\209\130\230\173\127\82\14\81", "\31\108\62\43\140\104\5\155",
+		"\107\189\65\251\171\217\131\31", "\121\33\126\19\25\205\224\91"
+	}
+	local BLAKE2B_Sigma = {
+		{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
+		{14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3},
+		{11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4},
+		{7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8},
+		{9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13},
+		{2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9},
+		{12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11},
+		{13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10},
+		{6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5},
+		{10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0},
+		{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
+		{14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3}
+	}
+end
 
-local BLAKE2b_BlockLen = 128
-local BLAKE2b_Rounds = 12
-local BLAKE2b_IV = {
-	"\8\201\188\243\103\230\9\106", "\59\167\202\132\133\174\103\187",
-	"\43\248\148\254\114\243\110\60", "\241\54\29\95\58\245\79\165",
-	"\209\130\230\173\127\82\14\81", "\31\108\62\43\140\104\5\155",
-	"\107\189\65\251\171\217\131\31", "\121\33\126\19\25\205\224\91"
-}
-local BLAKE2B_Sigma = {
-	{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
-	{14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3},
-	{11,8,12,0,5,2,15,13,10,14,3,6,7,1,9,4},
-	{7,9,3,1,13,12,11,14,2,6,5,10,4,0,15,8},
-	{9,0,5,7,2,4,10,15,14,1,11,12,6,8,3,13},
-	{2,12,6,10,0,11,8,3,4,13,7,5,15,14,1,9},
-	{12,5,1,15,14,13,4,10,0,7,6,3,9,2,8,11},
-	{13,11,7,14,12,1,3,9,5,0,15,4,8,6,2,10},
-	{6,15,14,9,11,3,0,8,12,2,13,7,1,4,10,5},
-	{10,2,8,4,7,6,1,5,15,11,9,14,3,12,13,0},
-	{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15},
-	{14,10,4,8,9,15,13,6,1,12,0,2,11,7,5,3}
-}
+
 
 
 return Hashing
